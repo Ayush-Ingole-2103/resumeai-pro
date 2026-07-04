@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . "/../config/db.php";
+require_once __DIR__ . "/TextFormatter.php";
 
 class ResumeAnalyzer
 {
@@ -48,14 +49,17 @@ class ResumeAnalyzer
 
                 require_once "../extractors/PDFExtractor.php";
 
-                return PDFExtractor::extract($file);
+                $text = PDFExtractor::extract($file);
+
+                return TextFormatter::format($text);
 
             case "docx":
 
                 require_once "../extractors/DOCXExtractor.php";
 
-                return DOCXExtractor::extract($file);
+                $text = DOCXExtractor::extract($file);
 
+                return TextFormatter::format($text);
             default:
 
                 die("Unsupported File Type.");
