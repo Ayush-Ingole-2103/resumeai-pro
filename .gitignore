@@ -1,0 +1,19 @@
+# Uploads
+assets/uploads/*
+
+# Keep folder
+!assets/uploads/.gitkeep
+
+# XAMPP
+xampp/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
