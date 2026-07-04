@@ -166,6 +166,14 @@ onclick="return confirm('Delete this resume?')">
 
 </a>
 
+<a
+href="../analysis/analyze.php?id=<?= $row['resume_id']; ?>"
+class="btn btn-success btn-sm">
+
+<i class="fas fa-search"></i> Analyze
+
+</a>
+
 </td>
 
 </tr>

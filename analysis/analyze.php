@@ -1,37 +1,27 @@
 <?php
 
 require_once "../config/db.php";
+require_once "../engine/ResumeAnalyzer.php";
 
-$file = $_GET['file'];
-
-$extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-
-$text = "";
-
-switch($extension)
+if(!isset($_GET['id']))
 {
-
-    case "pdf":
-
-        require_once "../extractors/PDFExtractor.php";
-
-        $text = PDFExtractor::extract($file);
-
-        break;
-
-    case "docx":
-
-        require_once "../extractors/DOCXExtractor.php";
-
-        $text = DOCXExtractor::extract($file);
-
-        break;
-
-    default:
-
-        die("Unsupported File");
-
+    die("Resume ID Missing");
 }
+
+$resume_id = intval($_GET['id']);
+
+$engine = new ResumeAnalyzer($conn);
+
+$resume = $engine->getResume($resume_id);
+
+if(!$resume)
+{
+    die("Resume not found.");
+}
+
+$text = $engine->getResumeText($resume);
+
+echo "<h2>Resume Text</h2>";
 
 echo "<pre>";
 
