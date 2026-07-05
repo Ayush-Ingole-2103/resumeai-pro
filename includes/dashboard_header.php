@@ -27,6 +27,59 @@ href="<?php echo BASE_URL; ?>/dist/css/adminlte.min.css">
 <link rel="stylesheet"
 href="<?php echo BASE_URL; ?>/assets/css/style.css">
 
+
+
+<link rel="stylesheet" href="../plugins/fontawesome-free/css/all.min.css">
+
+<style>
+
+@media print{
+
+.sidebar,
+.main-header,
+.main-footer,
+.btn,
+.card-header{
+display:none!important;
+}
+
+.content-wrapper{
+margin:0!important;
+padding:0!important;
+}
+
+.card{
+border:none!important;
+box-shadow:none!important;
+page-break-inside:avoid;
+}
+
+body{
+background:#fff!important;
+}
+
+}
+
+.card{
+border-radius:12px;
+box-shadow:0 4px 12px rgba(0,0,0,.08);
+}
+
+.small-box{
+border-radius:12px;
+}
+
+.badge{
+font-size:14px;
+padding:10px 15px;
+}
+
+</style>
+
+</head>
+
+
+
 </head>
 
 <body class="hold-transition sidebar-mini layout-fixed">
