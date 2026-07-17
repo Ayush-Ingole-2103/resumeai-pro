@@ -222,3 +222,311 @@ Resume Analytics
 </div>
 
 </div>
+
+<?php
+
+/* ===========================================
+   ATS Score Distribution
+=========================================== */
+
+$stmt = $conn->prepare("
+SELECT resume_title, ats_score
+FROM resumes
+WHERE user_id=?
+AND ats_score IS NOT NULL
+ORDER BY upload_date ASC
+");
+
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+
+$result = $stmt->get_result();
+
+$labels = [];
+$scores = [];
+
+while($row = $result->fetch_assoc()){
+
+    $labels[] = substr($row['resume_title'],0,20);
+    $scores[] = (float)$row['ats_score'];
+
+}
+
+if(empty($labels)){
+    $labels = ["No Resume"];
+    $scores = [0];
+}
+
+?>
+
+<div class="row">
+
+<div class="col-md-12">
+
+<div class="card">
+
+<div class="card-header bg-primary">
+
+<h3 class="card-title">
+
+ATS Score Distribution
+
+</h3>
+
+</div>
+
+<div class="card-body">
+
+<canvas id="atsChart" height="90"></canvas>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<?php
+
+/* ===========================================
+   Top Skills
+=========================================== */
+
+$stmt = $conn->prepare("
+SELECT
+skills.skill_name,
+COUNT(*) total
+
+FROM resume_skills
+
+INNER JOIN skills
+ON skills.skill_id = resume_skills.skill_id
+
+INNER JOIN resumes
+ON resumes.resume_id = resume_skills.resume_id
+
+WHERE resumes.user_id=?
+
+GROUP BY skills.skill_name
+
+ORDER BY total DESC
+
+LIMIT 10
+");
+
+$stmt->bind_param("i",$user_id);
+$stmt->execute();
+
+$topSkills = $stmt->get_result();
+
+?>
+
+<div class="row">
+
+<div class="col-md-6">
+
+<div class="card" style="min-height:420px;">
+
+<div class="card-header bg-success">
+
+<h3 class="card-title">
+
+Top Skills Used
+
+</h3>
+
+</div>
+
+<div class="card-body">
+
+<table class="table table-bordered table-hover">
+
+<thead>
+
+<tr>
+
+<th>Skill</th>
+
+<th>Total</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<?php
+
+if($topSkills->num_rows==0){
+
+?>
+
+<tr>
+
+<td colspan="2" class="text-center text-muted">
+
+No Skills Found
+
+</td>
+
+</tr>
+
+<?php
+
+}else{
+
+while($skill=$topSkills->fetch_assoc()){
+
+?>
+
+<tr>
+
+<td><?= htmlspecialchars($skill['skill_name']) ?></td>
+
+<td><?= $skill['total'] ?></td>
+
+</tr>
+
+<?php
+
+}
+
+}
+
+?>
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+</div>
+
+<?php
+
+/* ===========================================
+   Recent Analysis
+=========================================== */
+
+$stmt = $conn->prepare("
+SELECT
+resume_title,
+ats_score,
+upload_date
+FROM resumes
+WHERE user_id=?
+AND status='Analyzed'
+ORDER BY upload_date DESC
+LIMIT 5
+");
+
+$stmt->bind_param("i",$user_id);
+$stmt->execute();
+
+$recent = $stmt->get_result();
+
+?>
+
+<div class="col-md-6">
+
+<div class="card" style="min-height:420px;">
+
+<div class="card-header bg-info">
+
+<h3 class="card-title">
+
+Recent Resume Analysis
+
+</h3>
+
+</div>
+
+<div class="card-body">
+
+<table class="table table-bordered table-hover">
+
+<thead>
+
+<tr>
+
+<th>Resume</th>
+
+<th>ATS</th>
+
+<th>Date</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<?php
+
+if($recent->num_rows==0){
+
+?>
+
+<tr>
+
+<td colspan="3" class="text-center text-muted">
+
+No Analysis Available
+
+</td>
+
+</tr>
+
+<?php
+
+}else{
+
+while($row=$recent->fetch_assoc()){
+
+?>
+
+<tr>
+
+<td><?= htmlspecialchars($row['resume_title']) ?></td>
+
+<td>
+
+<span class="badge badge-success">
+
+<?= number_format($row['ats_score'],0) ?>%
+
+</span>
+
+</td>
+
+<td>
+
+<?= date("d M Y",strtotime($row['upload_date'])) ?>
+
+</td>
+
+</tr>
+
+<?php
+
+}
+
+}
+
+?>
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
