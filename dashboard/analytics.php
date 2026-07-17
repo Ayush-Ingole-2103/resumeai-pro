@@ -228,7 +228,7 @@ Resume Analytics
 /* ===========================================
    ATS Score Distribution
 =========================================== */
-
+/*
 $stmt = $conn->prepare("
 SELECT resume_title, ats_score
 FROM resumes
@@ -277,7 +277,9 @@ ATS Score Distribution
 
 <div class="card-body">
 
-<canvas id="atsChart" height="90"></canvas>
+<div style="height:350px;">
+    <canvas id="atsChart"></canvas>
+</div>
 
 </div>
 
@@ -288,7 +290,7 @@ ATS Score Distribution
 </div>
 
 <?php
-
+*/
 /* ===========================================
    Top Skills
 =========================================== */
@@ -589,7 +591,9 @@ Monthly Resume Uploads
 
 <div class="card-body">
 
-<canvas id="monthlyChart" height="120"></canvas>
+<div style="height:320px;">
+    <canvas id="monthlyChart"></canvas>
+</div>
 
 </div>
 
@@ -652,7 +656,9 @@ Resume Status
 
 <div class="card-body">
 
-<canvas id="statusChart" height="120"></canvas>
+<div style="height:320px;">
+    <canvas id="statusChart"></canvas>
+</div>
 
 </div>
 
@@ -791,7 +797,7 @@ ATS Score Categories
 /* ===========================================
    ATS Score Distribution
 =========================================== */
-
+/*
 new Chart(document.getElementById("atsChart"),{
 
     type:'bar',
@@ -829,7 +835,7 @@ new Chart(document.getElementById("atsChart"),{
 
         responsive:true,
 
-        maintainAspectRatio:false,
+        maintainAspectRatio:true,
 
         plugins:{
             legend:{
@@ -856,7 +862,7 @@ new Chart(document.getElementById("atsChart"),{
     }
 
 });
-
+*/
 
 /* ===========================================
    Monthly Uploads
@@ -892,7 +898,7 @@ new Chart(document.getElementById("monthlyChart"),{
 
         responsive:true,
 
-        maintainAspectRatio:false
+        maintainAspectRatio:true
 
     }
 
@@ -935,7 +941,7 @@ new Chart(document.getElementById("statusChart"),{
 
         responsive:true,
 
-        maintainAspectRatio:false
+        maintainAspectRatio:true
 
     }
 
