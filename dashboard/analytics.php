@@ -530,3 +530,252 @@ while($row=$recent->fetch_assoc()){
 </div>
 
 </div>
+
+<?php
+
+/* ===========================================
+   Monthly Resume Uploads
+=========================================== */
+
+$stmt = $conn->prepare("
+SELECT
+DATE_FORMAT(upload_date,'%b') AS month,
+COUNT(*) AS total
+FROM resumes
+WHERE user_id=?
+GROUP BY YEAR(upload_date), MONTH(upload_date)
+ORDER BY YEAR(upload_date), MONTH(upload_date)
+");
+
+$stmt->bind_param("i",$user_id);
+$stmt->execute();
+
+$result = $stmt->get_result();
+
+$months = [];
+$uploads = [];
+
+while($row = $result->fetch_assoc()){
+
+    $months[] = $row['month'];
+    $uploads[] = (int)$row['total'];
+
+}
+
+if(empty($months)){
+
+    $months = ["No Data"];
+    $uploads = [0];
+
+}
+
+?>
+
+<div class="row">
+
+<div class="col-md-6">
+
+<div class="card">
+
+<div class="card-header bg-warning">
+
+<h3 class="card-title">
+
+Monthly Resume Uploads
+
+</h3>
+
+</div>
+
+<div class="card-body">
+
+<canvas id="monthlyChart" height="120"></canvas>
+
+</div>
+
+</div>
+
+</div>
+
+<?php
+
+/* ===========================================
+   Resume Status Distribution
+=========================================== */
+
+$stmt = $conn->prepare("
+SELECT
+status,
+COUNT(*) total
+FROM resumes
+WHERE user_id=?
+GROUP BY status
+");
+
+$stmt->bind_param("i",$user_id);
+$stmt->execute();
+
+$result = $stmt->get_result();
+
+$statusLabels = [];
+$statusData = [];
+
+while($row = $result->fetch_assoc()){
+
+    $statusLabels[] = $row['status'];
+    $statusData[] = (int)$row['total'];
+
+}
+
+if(empty($statusLabels)){
+
+    $statusLabels = ["Uploaded"];
+    $statusData = [0];
+
+}
+
+?>
+
+<div class="col-md-6">
+
+<div class="card">
+
+<div class="card-header bg-danger">
+
+<h3 class="card-title">
+
+Resume Status
+
+</h3>
+
+</div>
+
+<div class="card-body">
+
+<canvas id="statusChart" height="120"></canvas>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<?php
+
+/* ===========================================
+   ATS Score Categories
+=========================================== */
+
+$excellent = 0;
+$good = 0;
+$poor = 0;
+
+$stmt = $conn->prepare("
+SELECT ats_score
+FROM resumes
+WHERE user_id=?
+AND ats_score IS NOT NULL
+");
+
+$stmt->bind_param("i",$user_id);
+$stmt->execute();
+
+$result = $stmt->get_result();
+
+while($row = $result->fetch_assoc()){
+
+    $score = (float)$row['ats_score'];
+
+    if($score >= 80){
+
+        $excellent++;
+
+    }
+    elseif($score >= 60){
+
+        $good++;
+
+    }
+    else{
+
+        $poor++;
+
+    }
+
+}
+
+?>
+
+<div class="row">
+
+<div class="col-md-12">
+
+<div class="card">
+
+<div class="card-header bg-dark">
+
+<h3 class="card-title">
+
+ATS Score Categories
+
+</h3>
+
+</div>
+
+<div class="card-body">
+
+<div class="row text-center">
+
+<div class="col-md-4">
+
+<h2 class="text-success">
+
+<?= $excellent ?>
+
+</h2>
+
+<p><strong>Excellent</strong></p>
+
+<small>ATS Score ≥ 80%</small>
+
+</div>
+
+<div class="col-md-4">
+
+<h2 class="text-warning">
+
+<?= $good ?>
+
+</h2>
+
+<p><strong>Good</strong></p>
+
+<small>ATS Score 60–79%</small>
+
+</div>
+
+<div class="col-md-4">
+
+<h2 class="text-danger">
+
+<?= $poor ?>
+
+</h2>
+
+<p><strong>Needs Improvement</strong></p>
+
+<small>ATS Score &lt; 60%</small>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
