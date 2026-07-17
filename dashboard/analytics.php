@@ -779,3 +779,176 @@ ATS Score Categories
 </div>
 
 </div>
+
+<!-- ===========================================
+     Chart.js
+=========================================== -->
+
+<script src="../plugins/chart.js/Chart.min.js"></script>
+
+<script>
+
+/* ===========================================
+   ATS Score Distribution
+=========================================== */
+
+new Chart(document.getElementById("atsChart"),{
+
+    type:'bar',
+
+    data:{
+
+        labels:<?= json_encode($labels) ?>,
+
+        datasets:[{
+
+            label:'ATS Score',
+
+            data:<?= json_encode($scores) ?>,
+
+            backgroundColor:[
+                '#17a2b8',
+                '#28a745',
+                '#ffc107',
+                '#dc3545',
+                '#6f42c1',
+                '#20c997',
+                '#fd7e14',
+                '#007bff',
+                '#6610f2',
+                '#e83e8c'
+            ],
+
+            borderWidth:1
+
+        }]
+
+    },
+
+    options:{
+
+        responsive:true,
+
+        maintainAspectRatio:false,
+
+        plugins:{
+            legend:{
+                display:false
+            }
+        },
+
+        scales:{
+
+            y:{
+
+                beginAtZero:true,
+
+                max:100,
+
+                ticks:{
+                    stepSize:10
+                }
+
+            }
+
+        }
+
+    }
+
+});
+
+
+/* ===========================================
+   Monthly Uploads
+=========================================== */
+
+new Chart(document.getElementById("monthlyChart"),{
+
+    type:'line',
+
+    data:{
+
+        labels:<?= json_encode($months) ?>,
+
+        datasets:[{
+
+            label:'Uploads',
+
+            data:<?= json_encode($uploads) ?>,
+
+            borderColor:'#007bff',
+
+            backgroundColor:'rgba(0,123,255,0.15)',
+
+            fill:true,
+
+            tension:0.3
+
+        }]
+
+    },
+
+    options:{
+
+        responsive:true,
+
+        maintainAspectRatio:false
+
+    }
+
+});
+
+
+/* ===========================================
+   Resume Status
+=========================================== */
+
+new Chart(document.getElementById("statusChart"),{
+
+    type:'doughnut',
+
+    data:{
+
+        labels:<?= json_encode($statusLabels) ?>,
+
+        datasets:[{
+
+            data:<?= json_encode($statusData) ?>,
+
+            backgroundColor:[
+
+                '#28a745',
+
+                '#ffc107',
+
+                '#dc3545',
+
+                '#17a2b8'
+
+            ]
+
+        }]
+
+    },
+
+    options:{
+
+        responsive:true,
+
+        maintainAspectRatio:false
+
+    }
+
+});
+
+</script>
+
+</div>
+
+</section>
+
+</div>
+
+<?php
+include_once "../includes/dashboard_footer.php";
+?>
