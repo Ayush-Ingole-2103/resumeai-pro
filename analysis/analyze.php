@@ -9,6 +9,7 @@ require_once "../engine/TextFormatter.php";
 require_once "../engine/ATSScorer.php";
 require_once "../engine/SkillExtractor.php";
 require_once "../engine/SuggestionEngine.php";
+require_once "../engine/ResumeCompleteness.php";
 
 require_once "SectionDetector.php";
 
@@ -124,6 +125,21 @@ try{
     $weaknesses = $feedback['weaknesses'];
 
     $suggestions = $feedback['suggestions'];
+
+    /* ============================================
+   Resume Completeness
+    ============================================ */
+
+    $completenessEngine = new ResumeCompleteness(
+        $sections,
+        $text
+    );
+
+    $completeness = $completenessEngine->calculate();
+
+    $completenessScore = $completeness['score'];
+
+    $completenessReport = implode("\n", $completeness['report']);
 
         /* ============================================
        Update Resume Score

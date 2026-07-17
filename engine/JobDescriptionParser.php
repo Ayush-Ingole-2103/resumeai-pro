@@ -3,53 +3,43 @@
 class JobDescriptionParser
 {
 
+    private $conn;
     private $text;
 
-    public function __construct($text)
+    public function __construct($conn, $text)
     {
+        $this->conn = $conn;
         $this->text = strtolower($text);
     }
 
     public function extractSkills()
     {
 
-        $masterSkills = [
+        $skills = [];
 
-            "java",
-            "python",
-            "php",
-            "javascript",
-            "react",
-            "node.js",
-            "mysql",
-            "mongodb",
-            "html",
-            "css",
-            "git",
-            "github",
-            "docker",
-            "aws",
-            "machine learning",
-            "data structures",
-            "dbms",
-            "c",
-            "c++"
+        $stmt = $this->conn->prepare("
+            SELECT skill_name
+            FROM skills
+            ORDER BY skill_name
+        ");
 
-        ];
+        $stmt->execute();
 
-        $found = [];
+        $result = $stmt->get_result();
 
-        foreach($masterSkills as $skill){
+        while($row = $result->fetch_assoc()){
 
-            if(stripos($this->text,$skill)!==false){
+            $skill = strtolower(trim($row['skill_name']));
 
-                $found[] = $skill;
+            if(stripos($this->text, $skill) !== false){
+
+                $skills[] = $row['skill_name'];
 
             }
 
         }
 
-        return array_unique($found);
+        return array_unique($skills);
 
     }
 
