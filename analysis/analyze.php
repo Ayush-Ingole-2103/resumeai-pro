@@ -127,7 +127,7 @@ try{
     $suggestions = $feedback['suggestions'];
 
     /* ============================================
-   Resume Completeness
+        Resume Completeness
     ============================================ */
 
     $completenessEngine = new ResumeCompleteness(
@@ -193,17 +193,19 @@ try{
     // Insert latest analysis
 
     $stmt = $conn->prepare("
-        INSERT INTO analysis
+      INSERT INTO analysis
         (
             resume_id,
             ats_score,
+            completeness_score,
             strengths,
             weaknesses,
-            suggestions
+            suggestions,
+            completeness_report
         )
         VALUES
         (
-            ?,?,?,?,?
+            ?,?,?,?,?,?,?
         )
     ");
 
