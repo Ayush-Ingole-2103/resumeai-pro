@@ -1,41 +1,67 @@
 <?php
 
+/*=====================================================
+    REPORT PAGE
+    AI Resume Analyzer & ATS Checker
+======================================================*/
+
+session_start();
+
 include_once "../includes/dashboard_header.php";
 include_once "../config/db.php";
 
-if(!isset($_GET['id'])){
+/*=====================================================
+    Validate Request
+======================================================*/
+
+if (!isset($_SESSION['user_id'])) {
+
+    header("Location: ../auth/login.php");
+    exit();
+
+}
+
+if (!isset($_GET['id'])) {
+
     die("Resume ID Missing.");
+
 }
 
 $resume_id = intval($_GET['id']);
+$user_id   = $_SESSION['user_id'];
 
-/* ---------------------------------
-   Resume Details
-----------------------------------*/
+/*=====================================================
+    Fetch Resume
+======================================================*/
 
 $stmt = $conn->prepare("
 SELECT *
 FROM resumes
 WHERE resume_id=?
+AND user_id=?
+LIMIT 1
 ");
 
-$stmt->bind_param("i",$resume_id);
+$stmt->bind_param("ii",$resume_id,$user_id);
 $stmt->execute();
 
 $resume = $stmt->get_result()->fetch_assoc();
 
 if(!$resume){
+
     die("Resume not found.");
+
 }
 
-/* ---------------------------------
-   Analysis Report
-----------------------------------*/
+/*=====================================================
+    Fetch Analysis
+======================================================*/
 
 $stmt = $conn->prepare("
 SELECT *
 FROM analysis
 WHERE resume_id=?
+LIMIT 1
 ");
 
 $stmt->bind_param("i",$resume_id);
@@ -44,19 +70,26 @@ $stmt->execute();
 $analysis = $stmt->get_result()->fetch_assoc();
 
 if(!$analysis){
+
     die("Analysis not found.");
+
 }
 
-/* ---------------------------------
-   Skills
-----------------------------------*/
+/*=====================================================
+    Fetch Skills
+======================================================*/
 
 $stmt = $conn->prepare("
 SELECT skills.skill_name
+
 FROM resume_skills
+
 INNER JOIN skills
+
 ON resume_skills.skill_id = skills.skill_id
+
 WHERE resume_skills.resume_id=?
+
 ORDER BY skills.skill_name
 ");
 
@@ -65,9 +98,53 @@ $stmt->execute();
 
 $skills = $stmt->get_result();
 
-$score = intval($analysis['ats_score']);
-?>
+/*=====================================================
+    Variables
+======================================================*/
 
+$atsScore = intval($analysis['ats_score']);
+
+$completenessScore = intval($analysis['completeness_score']);
+
+$completenessReport = explode(
+    "\n",
+    $analysis['completeness_report']
+);
+
+$strengths = array_filter(
+    array_map(
+        "trim",
+        preg_split('/[\r\n\.]+/', $analysis['strengths'])
+    )
+);
+
+$weaknesses = array_filter(
+    array_map(
+        "trim",
+        preg_split('/[\r\n\.]+/', $analysis['weaknesses'])
+    )
+);
+
+$suggestions = array_filter(
+    array_map(
+        "trim",
+        preg_split('/[\r\n\.]+/', $analysis['suggestions'])
+    )
+);
+
+$analysisWords = str_word_count(
+    $analysis['strengths'] .
+    $analysis['weaknesses'] .
+    $analysis['suggestions']
+);
+
+$modulesCompleted = 0;
+
+if(!empty($analysis['strengths'])) $modulesCompleted++;
+if(!empty($analysis['weaknesses'])) $modulesCompleted++;
+if(!empty($analysis['suggestions'])) $modulesCompleted++;
+
+?>
 <div class="content-wrapper">
 
 <section class="content-header">
@@ -88,27 +165,19 @@ Resume ATS Report
 
 <div class="container-fluid">
 
-<!-- Statistics Cards -->
+<!-- =====================================================
+     STATISTICS CARDS
+====================================================== -->
 
 <div class="row">
 
-<div class="col-lg-3 col-6">
+<div class="col-lg-3 col-md-6">
 
 <div class="small-box bg-info">
 
 <div class="inner">
 
-<?php
-
-$wordCount = str_word_count(
-    $analysis['strengths'].
-    $analysis['weaknesses'].
-    $analysis['suggestions']
-);
-
-?>
-
-<h3><?= $wordCount ?></h3>
+<h3><?= $analysisWords ?></h3>
 
 <p>Analysis Words</p>
 
@@ -124,23 +193,15 @@ $wordCount = str_word_count(
 
 </div>
 
-<div class="col-lg-3 col-6">
+<div class="col-lg-3 col-md-6">
 
 <div class="small-box bg-success">
 
 <div class="inner">
 
-<h3>
+<h3><?= $skills->num_rows ?></h3>
 
-<?= $skills->num_rows ?>
-
-</h3>
-
-<p>
-
-Skills Found
-
-</p>
+<p>Detected Skills</p>
 
 </div>
 
@@ -154,39 +215,21 @@ Skills Found
 
 </div>
 
-<div class="col-lg-3 col-6">
+<div class="col-lg-3 col-md-6">
 
 <div class="small-box bg-warning">
 
 <div class="inner">
 
-<?php
+<h3><?= $modulesCompleted ?>/3</h3>
 
-$sectionsCompleted = 0;
-
-if(!empty($analysis['strengths'])) $sectionsCompleted++;
-if(!empty($analysis['weaknesses'])) $sectionsCompleted++;
-if(!empty($analysis['suggestions'])) $sectionsCompleted++;
-
-?>
-
-<h3>
-
-<?= $sectionsCompleted ?>/3
-
-</h3>
-
-<p>
-
-Analysis Modules
-
-</p>
+<p>Analysis Modules</p>
 
 </div>
 
 <div class="icon">
 
-<i class="fas fa-list"></i>
+<i class="fas fa-layer-group"></i>
 
 </div>
 
@@ -194,23 +237,15 @@ Analysis Modules
 
 </div>
 
-<div class="col-lg-3 col-6">
+<div class="col-lg-3 col-md-6">
 
 <div class="small-box bg-danger">
 
 <div class="inner">
 
-<h3>
+<h3><?= $atsScore ?>%</h3>
 
-<?= $score ?>%
-
-</h3>
-
-<p>
-
-ATS Rating
-
-</p>
+<p>ATS Score</p>
 
 </div>
 
@@ -226,15 +261,25 @@ ATS Rating
 
 </div>
 
+<!-- =====================================================
+     MAIN CONTENT STARTS HERE
+====================================================== -->
+
 <div class="row">
 
-<div class="col-md-4">
+<!-- =====================================================
+     ATS SCORE CARD
+====================================================== -->
 
-<div class="card">
+<div class="col-lg-4">
 
-<div class="card-header bg-primary">
+<div class="card card-primary card-outline">
+
+<div class="card-header">
 
 <h3 class="card-title">
+
+<i class="fas fa-chart-line mr-2"></i>
 
 ATS Score
 
@@ -246,43 +291,43 @@ ATS Score
 
 <?php
 
-if($score>=80){
+if($atsScore >= 80){
 
-    $color="success";
-    $text="Excellent";
+    $badgeColor = "success";
+    $statusText = "Excellent";
 
 }
-elseif($score>=60){
+elseif($atsScore >= 60){
 
-    $color="warning";
-    $text="Good";
+    $badgeColor = "warning";
+    $statusText = "Good";
 
 }
 else{
 
-    $color="danger";
-    $text="Needs Improvement";
+    $badgeColor = "danger";
+    $statusText = "Needs Improvement";
 
 }
 
 ?>
 
-<div class="text-center">
-
 <div
-style="width:180px;
+style="
+width:180px;
 height:180px;
 border-radius:50%;
 margin:auto;
 border:12px solid #28a745;
 display:flex;
-align-items:center;
 justify-content:center;
-flex-direction:column;">
+align-items:center;
+flex-direction:column;
+">
 
-<h1 class="display-4">
+<h1 class="display-3 mb-0">
 
-<?= $score ?>
+<?= $atsScore ?>
 
 </h1>
 
@@ -290,15 +335,13 @@ flex-direction:column;">
 
 </div>
 
-</div>
+<br>
 
-<h4>
+<span class="badge badge-<?= $badgeColor ?> p-2">
 
-<?= $text ?>
+<?= $statusText ?>
 
-</h4>
-
-
+</span>
 
 <hr>
 
@@ -306,7 +349,7 @@ flex-direction:column;">
 
 <div
 class="progress-bar bg-success"
-style="width:<?= $score ?>%;">
+style="width:<?= $atsScore ?>%;">
 
 </div>
 
@@ -314,39 +357,9 @@ style="width:<?= $score ?>%;">
 
 <br>
 
-<small class="text-muted">
+<p class="text-muted">
 
-Resume Quality Meter
-
-</small>
-
-<p>
-
-Resume:
-
-<strong>
-
-<?= htmlspecialchars($resume['resume_title']) ?>
-
-</strong>
-
-</p>
-
-<p>
-
-Type:
-
-<?= htmlspecialchars($resume['resume_type']) ?>
-
-</p>
-
-<p>
-
-Analyzed On:
-
-<br>
-
-<?= date("d M Y h:i A",strtotime($analysis['analyzed_at'])) ?>
+Overall ATS Compatibility
 
 </p>
 
@@ -356,15 +369,101 @@ Analyzed On:
 
 </div>
 
-<div class="col-md-8">
+<!-- =====================================================
+     RESUME COMPLETENESS
+====================================================== -->
 
-<div class="card">
+<div class="col-lg-4">
 
-<div class="card-header bg-success">
+<div class="card card-info card-outline">
+
+<div class="card-header">
 
 <h3 class="card-title">
 
-Analysis Summary
+<i class="fas fa-clipboard-check mr-2"></i>
+
+Resume Completeness
+
+</h3>
+
+</div>
+
+<div class="card-body">
+
+<div class="text-center">
+
+<h1 class="display-4 text-info">
+
+<?= $completenessScore ?>%
+
+</h1>
+
+<p>
+
+Completeness Score
+
+</p>
+
+</div>
+
+<div class="progress mb-3">
+
+<div
+class="progress-bar bg-info"
+style="width:<?= $completenessScore ?>%;">
+
+</div>
+
+</div>
+
+<ul class="list-group">
+
+<?php
+
+foreach($completenessReport as $item){
+
+if(trim($item)=="") continue;
+
+$success = strpos($item,"✓")!==false;
+
+?>
+
+<li class="list-group-item">
+
+<span class="<?= $success ? 'text-success' : 'text-danger' ?>">
+
+<?= htmlspecialchars($item) ?>
+
+</span>
+
+</li>
+
+<?php } ?>
+
+</ul>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- =====================================================
+     RESUME SUMMARY
+====================================================== -->
+
+<div class="col-lg-4">
+
+<div class="card card-success card-outline">
+
+<div class="card-header">
+
+<h3 class="card-title">
+
+<i class="fas fa-file-alt mr-2"></i>
+
+Resume Summary
 
 </h3>
 
@@ -376,29 +475,49 @@ Analysis Summary
 
 <tr>
 
-<th width="35%">Resume Title</th>
+<th width="40%">
 
-<td><?= htmlspecialchars($resume['resume_title']) ?></td>
+Title
+
+</th>
+
+<td>
+
+<?= htmlspecialchars($resume['resume_title']) ?>
+
+</td>
 
 </tr>
 
 <tr>
 
-<th>Resume Type</th>
+<th>
 
-<td><?= htmlspecialchars($resume['resume_type']) ?></td>
+Type
+
+</th>
+
+<td>
+
+<?= htmlspecialchars($resume['resume_type']) ?>
+
+</td>
 
 </tr>
 
 <tr>
 
-<th>Status</th>
+<th>
+
+Status
+
+</th>
 
 <td>
 
 <span class="badge badge-success">
 
-<?= $resume['status'] ?>
+<?= htmlspecialchars($resume['status']) ?>
 
 </span>
 
@@ -408,15 +527,15 @@ Analysis Summary
 
 <tr>
 
-<th>ATS Score</th>
+<th>
+
+Uploaded
+
+</th>
 
 <td>
 
-<strong>
-
-<?= $score ?>%
-
-</strong>
+<?= date("d M Y",strtotime($resume['upload_date'])) ?>
 
 </td>
 
@@ -424,11 +543,35 @@ Analysis Summary
 
 <tr>
 
-<th>Uploaded</th>
+<th>
+
+Analyzed
+
+</th>
 
 <td>
 
-<?= date("d M Y",strtotime($resume['upload_date'])) ?>
+<?= date("d M Y h:i A",strtotime($analysis['analyzed_at'])) ?>
+
+</td>
+
+</tr>
+
+<tr>
+
+<th>
+
+ATS Score
+
+</th>
+
+<td>
+
+<strong>
+
+<?= $atsScore ?>%
+
+</strong>
 
 </td>
 
@@ -444,11 +587,21 @@ Analysis Summary
 
 </div>
 
-<div class="card mt-4">
+<!-- =====================================================
+     DETECTED SKILLS STARTS BELOW
+====================================================== -->
 
-<div class="card-header bg-info">
+<!-- =====================================================
+     DETECTED SKILLS
+====================================================== -->
+
+<div class="card card-primary card-outline mt-4">
+
+<div class="card-header">
 
 <h3 class="card-title">
+
+<i class="fas fa-code mr-2"></i>
 
 Detected Skills
 
@@ -466,9 +619,9 @@ if($skills->num_rows==0){
 
 <div class="alert alert-warning">
 
-<i class="fas fa-exclamation-circle"></i>
+<i class="fas fa-exclamation-triangle"></i>
 
-No recognizable technical skills were found in this resume.
+No technical skills were detected in this resume.
 
 </div>
 
@@ -476,15 +629,13 @@ No recognizable technical skills were found in this resume.
 
 }else{
 
-while($skill=$skills->fetch_assoc()){
+while($skill = $skills->fetch_assoc()){
 
 ?>
 
 <span
 class="badge badge-primary p-2 m-1"
 style="font-size:15px;">
-
-<i class="fas fa-check-circle"></i>
 
 <?= htmlspecialchars($skill['skill_name']) ?>
 
@@ -502,28 +653,29 @@ style="font-size:15px;">
 
 </div>
 
-    <!-- Strengths -->
-<div class="card mt-4">
+<!-- =====================================================
+     STRENGTHS
+====================================================== -->
 
-    <div class="card-header bg-success">
+<div class="card card-success card-outline mt-4">
 
-        <h3 class="card-title">
+<div class="card-header">
 
-            <i class="fas fa-check-circle"></i>
+<h3 class="card-title">
 
-            Strengths
+<i class="fas fa-check-circle mr-2"></i>
 
-        </h3>
+Strengths
 
-    </div>
+</h3>
 
-    <div class="card-body">
+</div>
+
+<div class="card-body">
 
 <?php
 
-$strengthList = array_filter(array_map("trim", preg_split('/[\r\n\.]+/', $analysis['strengths'])));
-
-if(count($strengthList)==0){
+if(count($strengths)==0){
 
 ?>
 
@@ -537,13 +689,13 @@ No strengths detected.
 
 }else{
 
-foreach($strengthList as $item){
+foreach($strengths as $item){
 
 ?>
 
-<div class="alert alert-success mb-2">
+<div class="alert alert-success">
 
-<i class="fas fa-check-circle"></i>
+<i class="fas fa-check-circle mr-2"></i>
 
 <?= htmlspecialchars($item) ?>
 
@@ -561,35 +713,35 @@ foreach($strengthList as $item){
 
 </div>
 
+<!-- =====================================================
+     WEAKNESSES
+====================================================== -->
 
+<div class="card card-danger card-outline mt-4">
 
-<!-- Weaknesses -->
+<div class="card-header">
 
-<div class="card mt-4">
+<h3 class="card-title">
 
-    <div class="card-header bg-danger">
+<i class="fas fa-times-circle mr-2"></i>
 
-        <h3 class="card-title">
+Weaknesses
 
-            <i class="fas fa-times-circle"></i>
+</h3>
 
-            Weaknesses
+</div>
 
-        </h3>
-
-    </div>
-
-    <div class="card-body">
+<div class="card-body">
 
 <?php
 
-$weakList = array_filter(array_map("trim", preg_split('/[\r\n\.]+/', $analysis['weaknesses'])));
-
-if(count($weakList)==0){
+if(count($weaknesses)==0){
 
 ?>
 
 <div class="alert alert-success">
+
+Excellent!
 
 No weaknesses detected.
 
@@ -599,13 +751,13 @@ No weaknesses detected.
 
 }else{
 
-foreach($weakList as $item){
+foreach($weaknesses as $item){
 
 ?>
 
-<div class="alert alert-danger mb-2">
+<div class="alert alert-danger">
 
-<i class="fas fa-times-circle"></i>
+<i class="fas fa-times-circle mr-2"></i>
 
 <?= htmlspecialchars($item) ?>
 
@@ -620,33 +772,32 @@ foreach($weakList as $item){
 ?>
 
 </div>
+
 </div>
 
+<!-- =====================================================
+     SUGGESTIONS
+====================================================== -->
 
+<div class="card card-warning card-outline mt-4">
 
-<!-- Suggestions -->
+<div class="card-header">
 
-<div class="card mt-4">
+<h3 class="card-title">
 
-    <div class="card-header bg-warning">
+<i class="fas fa-lightbulb mr-2"></i>
 
-        <h3 class="card-title text-dark">
+Suggestions for Improvement
 
-            <i class="fas fa-lightbulb"></i>
+</h3>
 
-            Suggestions
+</div>
 
-        </h3>
-
-    </div>
-
-    <div class="card-body">
+<div class="card-body">
 
 <?php
 
-$suggestionList = array_filter(array_map("trim", preg_split('/[\r\n\.]+/', $analysis['suggestions'])));
-
-if(count($suggestionList)==0){
+if(count($suggestions)==0){
 
 ?>
 
@@ -660,13 +811,13 @@ No suggestions available.
 
 }else{
 
-foreach($suggestionList as $item){
+foreach($suggestions as $item){
 
 ?>
 
-<div class="alert alert-warning mb-2">
+<div class="alert alert-warning">
 
-<i class="fas fa-lightbulb"></i>
+<i class="fas fa-arrow-circle-right mr-2"></i>
 
 <?= htmlspecialchars($item) ?>
 
@@ -684,120 +835,23 @@ foreach($suggestionList as $item){
 
 </div>
 
-<div class="card mt-4">
+<!-- =====================================================
+     ATS CHART + REPORT FOOTER STARTS BELOW
+====================================================== -->
 
-    <div class="card-header bg-info">
+<!-- =====================================================
+     ATS SCORE CHART
+====================================================== -->
 
-        <h3 class="card-title">
+<div class="card card-dark card-outline mt-4">
 
-            Resume Completeness
-
-        </h3>
-
-    </div>
-
-    <div class="card-body">
-
-        <div class="progress progress-lg">
-
-            <div
-                class="progress-bar bg-success"
-                role="progressbar"
-                style="width: <?= $score ?>%;">
-
-                <?= $score ?>%
-
-            </div>
-
-        </div>
-
-        <br>
-
-        <?php
-
-        if($score>=80){
-
-            echo "<strong class='text-success'>Excellent Resume Structure</strong>";
-
-        }
-        elseif($score>=60){
-
-            echo "<strong class='text-warning'>Good Resume - Needs Minor Improvements</strong>";
-
-        }
-        else{
-
-            echo "<strong class='text-danger'>Resume Needs Significant Improvement</strong>";
-
-        }
-
-        ?>
-
-    </div>
-
-</div>
-
-<hr>
-
-<div class="row text-center">
-
-<div class="col-md-4">
-
-<h5>
-
-<?= $skills->num_rows ?>
-
-</h5>
-
-<small>
-
-Skills
-
-</small>
-
-</div>
-
-<div class="col-md-4">
-
-<h5>
-
-<?= $score ?>%
-
-</h5>
-
-<small>
-
-ATS Score
-
-</small>
-
-</div>
-
-<div class="col-md-4">
-
-<h5>
-
-<?= date("Y") ?>
-
-</h5>
-
-<small>
-
-Analysis Year
-
-</small>
-
-</div>
-
-</div>
-
-<div class="card mt-4">
-
-<div class="card-header bg-dark">
+<div class="card-header">
 
 <h3 class="card-title">
 
-ATS Score Breakdown
+<i class="fas fa-chart-bar mr-2"></i>
+
+ATS Score Visualization
 
 </h3>
 
@@ -805,16 +859,77 @@ ATS Score Breakdown
 
 <div class="card-body">
 
-<canvas id="atsChart" height="120"></canvas>
+<canvas id="atsChart" height="100"></canvas>
 
 </div>
 
 </div>
 
+<!-- =====================================================
+     QUICK STATS
+====================================================== -->
 
 <hr>
 
-<div class="text-center text-muted mb-3">
+<div class="row text-center mt-4">
+
+<div class="col-md-3">
+
+<h3 class="text-primary">
+
+<?= $atsScore ?>%
+
+</h3>
+
+<p>ATS Score</p>
+
+</div>
+
+<div class="col-md-3">
+
+<h3 class="text-info">
+
+<?= $completenessScore ?>%
+
+</h3>
+
+<p>Completeness</p>
+
+</div>
+
+<div class="col-md-3">
+
+<h3 class="text-success">
+
+<?= $skills->num_rows ?>
+
+</h3>
+
+<p>Skills</p>
+
+</div>
+
+<div class="col-md-3">
+
+<h3 class="text-warning">
+
+<?= date("Y") ?>
+
+</h3>
+
+<p>Analysis Year</p>
+
+</div>
+
+</div>
+
+<!-- =====================================================
+     REPORT FOOTER
+====================================================== -->
+
+<hr>
+
+<div class="text-center text-muted mt-4 mb-4">
 
 <h5>
 
@@ -828,7 +943,7 @@ Generated on
 
 <strong>
 
-<?= date("d M Y, h:i A") ?>
+<?= date("d M Y h:i A") ?>
 
 </strong>
 
@@ -836,18 +951,20 @@ Generated on
 
 <p>
 
-Designed for academic demonstration and ATS evaluation.
+Professional Resume Analysis Report
 
 </p>
 
 </div>
 
-
-</div>
+<!-- =====================================================
+     ACTION BUTTONS
+====================================================== -->
 
 <div class="text-center mt-5 mb-5">
 
-<a href="../dashboard/history.php"
+<a
+href="../dashboard/history.php"
 class="btn btn-primary">
 
 <i class="fas fa-arrow-left"></i>
@@ -894,64 +1011,70 @@ Dashboard
 
 </div>
 
+<!-- =====================================================
+     CHART JS
+====================================================== -->
+
 <script src="../plugins/chart.js/Chart.min.js"></script>
 
 <script>
 
 new Chart(document.getElementById("atsChart"),{
 
-type:'bar',
+    type:'bar',
 
-data:{
+    data:{
 
-labels:[
+        labels:[
+            'ATS Score',
+            'Completeness'
+        ],
 
-'ATS Score'
+        datasets:[{
 
-],
+            label:'Score',
 
-datasets:[{
+            data:[
+                <?= $atsScore ?>,
+                <?= $completenessScore ?>
+            ]
 
-label:'Score',
+        }]
 
-data:[<?= $score ?>]
+    },
 
-}]
+    options:{
 
-},
+        responsive:true,
 
-options:{
+        plugins:{
 
-responsive:true,
+            legend:{
+                display:false
+            }
 
-plugins:{
+        },
 
-legend:{
+        scales:{
 
-display:false
+            y:{
 
-}
+                beginAtZero:true,
 
-},
+                max:100
 
-scales:{
+            }
 
-y:{
+        }
 
-beginAtZero:true,
-
-max:100
-
-}
-
-}
-
-}
+    }
 
 });
 
 </script>
 
 <?php
+
 include_once "../includes/dashboard_footer.php";
+
 ?>
