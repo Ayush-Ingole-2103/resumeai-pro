@@ -1,6 +1,15 @@
 <?php
 
+/*=========================================================
+    AI Resume Analyzer & ATS Checker
+    File : analysis/analyze.php
+==========================================================*/
+
 session_start();
+
+/*=========================================================
+    Required Files
+==========================================================*/
 
 require_once "../config/db.php";
 
@@ -13,9 +22,9 @@ require_once "../engine/ResumeCompleteness.php";
 
 require_once "SectionDetector.php";
 
-/* ============================================
-   Validate Request
-============================================ */
+/*=========================================================
+    Validate User Session
+==========================================================*/
 
 if (!isset($_SESSION['user_id'])) {
 
@@ -24,6 +33,10 @@ if (!isset($_SESSION['user_id'])) {
 
 }
 
+/*=========================================================
+    Validate Resume ID
+==========================================================*/
+
 if (!isset($_GET['id'])) {
 
     die("Resume ID Missing.");
@@ -31,382 +44,467 @@ if (!isset($_GET['id'])) {
 }
 
 $resume_id = intval($_GET['id']);
+$user_id   = $_SESSION['user_id'];
 
-$user_id = $_SESSION['user_id'];
-
-/* ============================================
-   Verify Resume Ownership
-============================================ */
+/*=========================================================
+    Fetch Resume
+==========================================================*/
 
 $stmt = $conn->prepare("
 SELECT *
 FROM resumes
-WHERE resume_id=?
-AND user_id=?
+WHERE resume_id = ?
+AND user_id = ?
 LIMIT 1
 ");
+
+if(!$stmt){
+
+    die($conn->error);
+
+}
 
 $stmt->bind_param("ii",$resume_id,$user_id);
 
 $stmt->execute();
 
-$result = $stmt->get_result();
+$resume = $stmt->get_result()->fetch_assoc();
 
-if($result->num_rows==0){
+$stmt->close();
+
+if(!$resume){
 
     die("Resume not found or access denied.");
 
 }
 
-$resume = $result->fetch_assoc();
-
-/* ============================================
-   Start Database Transaction
-============================================ */
+/*=========================================================
+    Start Transaction
+==========================================================*/
 
 $conn->begin_transaction();
 
 try{
 
-    /* ============================================
-       Resume Analyzer
-    ============================================ */
+/*=========================================================
+    Resume Text Extraction
+==========================================================*/
 
-    $resumeEngine = new ResumeAnalyzer($conn);
+$resumeEngine = new ResumeAnalyzer($conn);
 
-    $text = $resumeEngine->getResumeText($resume);
+$text = $resumeEngine->getResumeText($resume);
 
-    if(trim($text)==""){
+if(trim($text)==""){
 
-        throw new Exception("Unable to extract resume text.");
-
-    }
-
-    /* ============================================
-       Detect Resume Sections
-    ============================================ */
-
-    $sections = SectionDetector::detect($text);
-
-    /* ============================================
-       ATS Score
-    ============================================ */
-
-    $atsEngine = new ATSScorer($sections,$text);
-
-    $atsResult = $atsEngine->calculate();
-
-    $score = $atsResult['score'];
-
-    $report = $atsResult['report'];
-
-    /* ============================================
-       Skill Extraction
-    ============================================ */
-
-    $skillEngine = new SkillExtractor($text);
-
-    $skills = $skillEngine->extract();
-
-    /* ============================================
-       AI Suggestions
-    ============================================ */
-
-    $suggestionEngine = new SuggestionEngine(
-        $sections,
-        $skills,
-        $text
-    );
-
-    $feedback = $suggestionEngine->generate();
-
-    $strengths = $feedback['strengths'];
-
-    $weaknesses = $feedback['weaknesses'];
-
-    $suggestions = $feedback['suggestions'];
-
-    /* ============================================
-        Resume Completeness
-    ============================================ */
-
-    $completenessEngine = new ResumeCompleteness(
-        $sections,
-        $text
-    );
-
-    $completeness = $completenessEngine->calculate();
-
-    $completenessScore = $completeness['score'];
-
-    $completenessReport = implode("\n", $completeness['report']);
-
-        /* ============================================
-       Update Resume Score
-    ============================================ */
-
-    $stmt = $conn->prepare("
-        UPDATE resumes
-        SET ats_score = ?,
-            status = 'Analyzed'
-        WHERE resume_id = ?
-    ");
-
-    if(!$stmt){
-        throw new Exception($conn->error);
-    }
-
-    $stmt->bind_param("ii",$score,$resume_id);
-
-    if(!$stmt->execute()){
-        throw new Exception($stmt->error);
-    }
-
-    $stmt->close();
-
-
-
-    /* ============================================
-       Save Analysis Report
-    ============================================ */
-
-    // Remove previous analysis
-    $stmt = $conn->prepare("
-        DELETE FROM analysis
-        WHERE resume_id=?
-    ");
-
-    if(!$stmt){
-        throw new Exception($conn->error);
-    }
-
-    $stmt->bind_param("i",$resume_id);
-
-    if(!$stmt->execute()){
-        throw new Exception($stmt->error);
-    }
-
-    $stmt->close();
-
-
-
-    // Insert latest analysis
-
-    $stmt = $conn->prepare("
-      INSERT INTO analysis
-        (
-            resume_id,
-            ats_score,
-            completeness_score,
-            strengths,
-            weaknesses,
-            suggestions,
-            completeness_report
-        )
-        VALUES
-        (
-            ?,?,?,?,?,?,?
-        )
-    ");
-
-    if(!$stmt){
-        throw new Exception($conn->error);
-    }
-
-    $stmt->bind_param(
-        "iisss",
-        $resume_id,
-        $score,
-        $strengths,
-        $weaknesses,
-        $suggestions
-    );
-
-    if(!$stmt->execute()){
-        throw new Exception($stmt->error);
-    }
-
-    $stmt->close();
-
-
-
-    /* ============================================
-       Save Resume Skills
-    ============================================ */
-
-    // Remove old extracted skills
-
-    $stmt = $conn->prepare("
-        DELETE FROM resume_skills
-        WHERE resume_id=?
-    ");
-
-    if(!$stmt){
-        throw new Exception($conn->error);
-    }
-
-    $stmt->bind_param("i",$resume_id);
-
-    if(!$stmt->execute()){
-        throw new Exception($stmt->error);
-    }
-
-    $stmt->close();
-
-
-
-    /* ============================================
-       Insert New Skills
-    ============================================ */
-
-    foreach($skills as $skill){
-
-        // Find skill_id
-
-        $stmt = $conn->prepare("
-            SELECT skill_id
-            FROM skills
-            WHERE skill_name=?
-            LIMIT 1
-        ");
-
-        if(!$stmt){
-            throw new Exception($conn->error);
-        }
-
-        $stmt->bind_param("s",$skill);
-
-        if(!$stmt->execute()){
-            throw new Exception($stmt->error);
-        }
-
-        $result = $stmt->get_result();
-
-        if($result->num_rows>0){
-
-            $row = $result->fetch_assoc();
-
-            $skill_id = $row['skill_id'];
-
-            $insert = $conn->prepare("
-                INSERT INTO resume_skills
-                (
-                    resume_id,
-                    skill_id
-                )
-                VALUES
-                (
-                    ?,?
-                )
-            ");
-
-            if(!$insert){
-                throw new Exception($conn->error);
-            }
-
-            $insert->bind_param(
-                "ii",
-                $resume_id,
-                $skill_id
-            );
-
-            if(!$insert->execute()){
-                throw new Exception($insert->error);
-            }
-
-            $insert->close();
-
-        }
-
-        $stmt->close();
-
-    }
-       /* ============================================
-       Transaction Successful
-    ============================================ */
-
-    $conn->commit();
-
-    header("Location: report.php?id=".$resume_id);
-
-    exit();
+    throw new Exception("Unable to extract resume text.");
 
 }
 
-/* ============================================
-   Error Handling
-============================================ */
+/*=========================================================
+    Detect Resume Sections
+==========================================================*/
+
+$sections = SectionDetector::detect($text);
+
+/*=========================================================
+    ATS Score Calculation
+==========================================================*/
+
+$atsEngine = new ATSScorer(
+    $sections,
+    $text
+);
+
+$atsResult = $atsEngine->calculate();
+
+$score  = intval($atsResult['score']);
+$report = $atsResult['report'];
+
+/*=========================================================
+    Extract Technical Skills
+==========================================================*/
+
+$skillEngine = new SkillExtractor($text);
+
+$skills = $skillEngine->extract();
+
+/*=========================================================
+    Generate Suggestions
+==========================================================*/
+
+$suggestionEngine = new SuggestionEngine(
+    $sections,
+    $skills,
+    $text
+);
+
+$feedback = $suggestionEngine->generate();
+
+$strengths  = $feedback['strengths'];
+$weaknesses = $feedback['weaknesses'];
+$suggestions = $feedback['suggestions'];
+
+/*=========================================================
+    Resume Completeness
+==========================================================*/
+
+$completeEngine = new ResumeCompleteness(
+    $sections,
+    $text
+);
+
+$completeResult = $completeEngine->calculate();
+
+$completenessScore = intval(
+    $completeResult['score']
+);
+
+$completenessReport = implode(
+    "\n",
+    $completeResult['report']
+);
+
+/*=========================================================
+    DATABASE OPERATIONS START BELOW
+==========================================================*/
+
+/*=========================================================
+    Update Resume Status
+==========================================================*/
+
+$stmt = $conn->prepare("
+UPDATE resumes
+SET
+    ats_score = ?,
+    status = 'Analyzed',
+    analyzed_at = NOW()
+WHERE resume_id = ?
+");
+
+if(!$stmt){
+
+    throw new Exception($conn->error);
+
+}
+
+$stmt->bind_param(
+    "ii",
+    $score,
+    $resume_id
+);
+
+if(!$stmt->execute()){
+
+    throw new Exception($stmt->error);
+
+}
+
+$stmt->close();
+
+
+/*=========================================================
+    Remove Previous Analysis
+==========================================================*/
+
+$stmt = $conn->prepare("
+DELETE FROM analysis
+WHERE resume_id = ?
+");
+
+if(!$stmt){
+
+    throw new Exception($conn->error);
+
+}
+
+$stmt->bind_param(
+    "i",
+    $resume_id
+);
+
+if(!$stmt->execute()){
+
+    throw new Exception($stmt->error);
+
+}
+
+$stmt->close();
+
+
+/*=========================================================
+    Insert New Analysis
+==========================================================*/
+
+$stmt = $conn->prepare("
+INSERT INTO analysis
+(
+    resume_id,
+    ats_score,
+    completeness_score,
+    strengths,
+    weaknesses,
+    suggestions,
+    completeness_report
+)
+VALUES
+(
+    ?, ?, ?, ?, ?, ?, ?
+)
+");
+
+if(!$stmt){
+
+    throw new Exception($conn->error);
+
+}
+
+$stmt->bind_param(
+    "iiissss",
+    $resume_id,
+    $score,
+    $completenessScore,
+    $strengths,
+    $weaknesses,
+    $suggestions,
+    $completenessReport
+);
+
+if(!$stmt->execute()){
+
+    throw new Exception($stmt->error);
+
+}
+
+$stmt->close();
+
+
+/*=========================================================
+    Remove Previously Saved Skills
+==========================================================*/
+
+$stmt = $conn->prepare("
+DELETE FROM resume_skills
+WHERE resume_id = ?
+");
+
+if(!$stmt){
+
+    throw new Exception($conn->error);
+
+}
+
+$stmt->bind_param(
+    "i",
+    $resume_id
+);
+
+if(!$stmt->execute()){
+
+    throw new Exception($stmt->error);
+
+}
+
+$stmt->close();
+
+
+/*=========================================================
+    Save Extracted Skills
+==========================================================*/
+
+foreach($skills as $skill){
+
+    $stmt = $conn->prepare("
+    SELECT skill_id
+    FROM skills
+    WHERE skill_name = ?
+    LIMIT 1
+    ");
+
+    if(!$stmt){
+
+        throw new Exception($conn->error);
+
+    }
+
+    $stmt->bind_param(
+        "s",
+        $skill
+    );
+
+    if(!$stmt->execute()){
+
+        throw new Exception($stmt->error);
+
+    }
+
+    $result = $stmt->get_result();
+
+    if($result->num_rows > 0){
+
+        $row = $result->fetch_assoc();
+
+        $skill_id = $row['skill_id'];
+
+        $insert = $conn->prepare("
+        INSERT INTO resume_skills
+        (
+            resume_id,
+            skill_id
+        )
+        VALUES
+        (
+            ?, ?
+        )
+        ");
+
+        if(!$insert){
+
+            throw new Exception($conn->error);
+
+        }
+
+        $insert->bind_param(
+            "ii",
+            $resume_id,
+            $skill_id
+        );
+
+        if(!$insert->execute()){
+
+            throw new Exception($insert->error);
+
+        }
+
+        $insert->close();
+
+    }
+
+    $stmt->close();
+
+}
+
+/*=========================================================
+    Finish Transaction
+==========================================================*/
+
+/*=========================================================
+    Commit Transaction
+==========================================================*/
+
+$conn->commit();
+
+/*=========================================================
+    Redirect to Report
+==========================================================*/
+
+header("Location: report.php?id=".$resume_id);
+
+exit();
+
+}
+
+/*=========================================================
+    Error Handling
+==========================================================*/
 
 catch(Exception $e){
 
     $conn->rollback();
 
-    echo "
+?>
 
-    <!DOCTYPE html>
+<!DOCTYPE html>
 
-    <html>
+<html>
 
-    <head>
+<head>
 
-        <title>Analysis Failed</title>
+<meta charset="UTF-8">
 
-        <link rel='stylesheet'
-        href='../plugins/bootstrap/css/bootstrap.min.css'>
+<title>Analysis Failed</title>
 
-    </head>
+<link rel="stylesheet"
+href="../plugins/bootstrap/css/bootstrap.min.css">
 
-    <body class='bg-light'>
+<link rel="stylesheet"
+href="../plugins/fontawesome-free/css/all.min.css">
 
-        <div class='container mt-5'>
+</head>
 
-            <div class='row justify-content-center'>
+<body class="bg-light">
 
-                <div class='col-md-8'>
+<div class="container mt-5">
 
-                    <div class='card shadow'>
+<div class="row justify-content-center">
 
-                        <div class='card-header bg-danger text-white'>
+<div class="col-md-8">
 
-                            Analysis Failed
+<div class="card shadow">
 
-                        </div>
+<div class="card-header bg-danger text-white">
 
-                        <div class='card-body'>
+<h4 class="mb-0">
 
-                            <h5>
+<i class="fas fa-times-circle"></i>
 
-                            Something went wrong while analyzing the resume.
+Analysis Failed
 
-                            </h5>
+</h4>
 
-                            <hr>
+</div>
 
-                            <strong>Error Details</strong>
+<div class="card-body">
 
-                            <pre>".$e->getMessage()."</pre>
+<div class="alert alert-danger">
 
-                            <a href='../dashboard/history.php'
-                            class='btn btn-primary mt-3'>
+Something went wrong while analyzing the resume.
 
-                                Back to Resume History
+</div>
 
-                            </a>
+<h5>Error Details</h5>
 
-                        </div>
+<pre><?= htmlspecialchars($e->getMessage()) ?></pre>
 
-                    </div>
+<hr>
 
-                </div>
+<div class="text-center">
 
-            </div>
+<a
+href="../dashboard/history.php"
+class="btn btn-primary">
 
-        </div>
+<i class="fas fa-arrow-left"></i>
 
-    </body>
+Back to Resume History
 
-    </html>
+</a>
 
-    ";
+<a
+href="../dashboard/index.php"
+class="btn btn-dark">
+
+<i class="fas fa-home"></i>
+
+Dashboard
+
+</a>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</body>
+
+</html>
+
+<?php
 
 }
